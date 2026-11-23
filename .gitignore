@@ -2,6 +2,7 @@ node_modules/
 dist/
 target/
 data/
+work/
 .env
 .env.*
 !.env.example
