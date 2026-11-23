@@ -1,0 +1,105 @@
+openapi: 3.0.3
+info:
+  title: SyntaxLab Practice API
+  version: 1.0.0
+  description: 程式語法練習、作答與歷史複習 API
+servers:
+  - url: http://localhost:8080
+paths:
+  /api/topics:
+    get:
+      summary: 列出可練習的語法主題
+      responses:
+        '200': { description: 主題清單 }
+  /api/exercises/generate:
+    post:
+      summary: 依主題與難度生成練習
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [topic, difficulty]
+              properties:
+                topic: { type: string, example: javascript }
+                difficulty: { type: string, enum: [beginner, intermediate, advanced] }
+                count: { type: integer, minimum: 1, maximum: 10, default: 5 }
+      responses:
+        '201': { description: 新練習 }
+  /api/exercises/{id}:
+    get:
+      summary: 取得練習題目
+      parameters:
+        - { in: path, name: id, required: true, schema: { type: integer, format: int64 } }
+      responses:
+        '200': { description: 練習內容 }
+        '404': { description: 找不到練習 }
+  /api/exercises/{id}/submit:
+    post:
+      summary: 提交答案並取得評分與解析
+      parameters:
+        - { in: path, name: id, required: true, schema: { type: integer, format: int64 } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                answers:
+                  type: array
+                  items:
+                    type: object
+                    properties:
+                      questionId: { type: integer, format: int64 }
+                      selectedOption: { type: integer }
+      responses:
+        '201': { description: 作答結果 }
+  /api/attempts:
+    get:
+      summary: 查詢作答歷史
+      parameters:
+        - { in: query, name: topic, schema: { type: string } }
+        - { in: query, name: limit, schema: { type: integer, default: 50 } }
+      responses:
+        '200': { description: 歷史清單 }
+  /api/attempts/{id}:
+    get:
+      summary: 讀取歷史作答與詳解
+      parameters:
+        - { in: path, name: id, required: true, schema: { type: integer, format: int64 } }
+      responses:
+        '200': { description: 歷史作答 }
+components:
+  schemas:
+    Topic:
+      type: object
+      properties:
+        id: { type: string }
+        name: { type: string }
+        icon: { type: string }
+        description: { type: string }
+    Exercise:
+      type: object
+      properties:
+        id: { type: integer, format: int64 }
+        topic: { $ref: '#/components/schemas/Topic' }
+        difficulty: { type: string }
+        questions: { type: array, items: { $ref: '#/components/schemas/Question' } }
+    Question:
+      type: object
+      properties:
+        id: { type: integer, format: int64 }
+        prompt: { type: string }
+        code: { type: string, nullable: true }
+        options: { type: array, items: { type: string } }
+        explanation: { type: string }
+    Attempt:
+      type: object
+      properties:
+        id: { type: integer, format: int64 }
+        topic: { type: string }
+        score: { type: integer }
+        total: { type: integer }
+        completedAt: { type: string, format: date-time }
