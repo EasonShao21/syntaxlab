@@ -3,14 +3,97 @@ import { ref, computed, onMounted } from 'vue';
 import { Code2, LayoutDashboard, History, BookOpen, Sparkles, ChevronRight, Clock3, CircleCheck, ArrowRight, RotateCcw, Menu, X, ArrowLeft, Trophy, Zap } from 'lucide-vue-next';
 
 const topics=ref([]), history=ref([]), selected=ref('javascript'), difficulty=ref('beginner'), count=ref(5), exercise=ref(null), answers=ref({}), result=ref(null), loading=ref(false), view=ref('home'), mobileMenu=ref(false), error=ref('');
+const isPagesDemo=import.meta.env.PROD && window.location.hostname.endsWith('github.io');
 const topicMeta={javascript:{tone:'gold',tag:'互動語言',badge:'JS'},html:{tone:'coral',tag:'標記語言',badge:'5'},css:{tone:'blue',tag:'樣式語言',badge:'✳'},java:{tone:'violet',tag:'物件導向',badge:'☕'},python:{tone:'green',tag:'簡潔易讀',badge:'Py'}};
 const currentTopic=computed(()=>topics.value.find(t=>t.id===selected.value));
 const scorePct=computed(()=>result.value?Math.round(result.value.score/result.value.total*100):0);
-async function load(){try{const [t,h]=await Promise.all([fetch('/api/topics'),fetch('/api/attempts')]);if(!t.ok||!h.ok)throw Error('API');topics.value=await t.json();history.value=await h.json();}catch{error.value='無法連線至練習服務。請先啟動 Spring Boot API。';topics.value=[{id:'html',name:'HTML',icon:'⌘',description:'網頁內容與語意結構'},{id:'css',name:'CSS',icon:'◈',description:'樣式、版面與響應式設計'},{id:'javascript',name:'JavaScript',icon:'JS',description:'互動、語法與程式邏輯'},{id:'java',name:'Java',icon:'☕',description:'物件導向與核心語法'},{id:'python',name:'Python',icon:'Py',description:'簡潔語法與資料處理'}];}}
-async function startPractice(){loading.value=true;error.value='';try{const r=await fetch('/api/exercises/generate',{method:'POST',cache:'no-store',headers:{'Content-Type':'application/json'},body:JSON.stringify({topic:selected.value,difficulty:difficulty.value,count:count.value})});if(!r.ok)throw Error('產生題目失敗');exercise.value=await r.json();answers.value={};result.value=null;view.value='practice';window.scrollTo({top:0,behavior:'smooth'});}catch{error.value='題目載入失敗，請確認 API 已啟動。'}finally{loading.value=false;}}
-async function submit(){if(!exercise.value)return;loading.value=true;try{const r=await fetch(`/api/exercises/${exercise.value.id}/submit`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({answers:exercise.value.questions.map(q=>({questionId:q.id,selectedOption:answers.value[q.id]??null}))})});if(!r.ok)throw Error();result.value=await r.json();exercise.value.questions=result.value.questions;view.value='result';await refreshHistory();}catch{error.value='送出答案失敗，請再試一次。'}finally{loading.value=false;}}
-async function refreshHistory(){try{history.value=await(await fetch('/api/attempts')).json()}catch{}}
-async function openAttempt(id){try{result.value=await(await fetch(`/api/attempts/${id}`)).json();exercise.value={id:result.value.exerciseId,topic:result.value.topic,questions:result.value.questions};view.value='result';}catch{}}
+const pagesTopics=[
+  {id:'html',name:'HTML',icon:'⌘',description:'網頁內容與語意結構'},
+  {id:'css',name:'CSS',icon:'◈',description:'樣式、版面與響應式設計'},
+  {id:'javascript',name:'JavaScript',icon:'JS',description:'互動、語法與程式邏輯'},
+  {id:'java',name:'Java',icon:'☕',description:'物件導向與核心語法'},
+  {id:'python',name:'Python',icon:'Py',description:'簡潔語法與資料處理'}
+];
+const pagesQuestionBank={
+  javascript:[
+    {prompt:'typeof null 會回傳什麼？',code:'',options:['null','object','undefined','number'],correctOption:1,explanation:'這是 JavaScript 長期存在的特殊行為：typeof null 會回傳 object。'},
+    {prompt:'哪一種宣告不能重新指派？',code:'',options:['var','let','const','function'],correctOption:2,explanation:'const 不能重新綁定變數，但參照到的物件內容仍可能改變。'},
+    {prompt:'以下程式會輸出什麼？',code:"console.log(2 + '2');",options:['4','22','NaN','錯誤'],correctOption:1,explanation:'其中一個運算元是字串時，+ 會進行字串串接。'},
+    {prompt:'哪個陣列方法會轉換每個項目並建立新陣列？',code:'',options:['forEach','map','reduce','find'],correctOption:1,explanation:'map 會回傳一個包含回呼函式結果的新陣列。'},
+    {prompt:'哪個運算子可比較值與型別都相同？',code:'===',options:['=','==','===','!='],correctOption:2,explanation:'嚴格相等運算子會同時比較值與型別。'}
+  ],
+  html:[
+    {prompt:'哪個元素代表頁面的主要內容？',code:'',options:['<section>','<main>','<article>','<body>'],correctOption:1,explanation:'main 元素標示頁面的主要內容。'},
+    {prompt:'圖片替代文字應設定在哪個屬性？',code:'',options:['title','alt','label','caption'],correctOption:1,explanation:'alt 會向輔助科技傳達圖片用途。'},
+    {prompt:'哪個元素可以建立超連結？',code:'',options:['<link>','<a>','<href>','<nav>'],correctOption:1,explanation:'a 錨點元素透過 href 屬性建立連結。'},
+    {prompt:'哪個標籤代表最高層級標題？',code:'',options:['<h1>','<heading>','<title>','<head>'],correctOption:0,explanation:'h1 是頁面內容中最高層級的標題。'},
+    {prompt:'哪個元素適合放置主要導覽？',code:'',options:['<nav>','<aside>','<footer>','<address>'],correctOption:0,explanation:'nav 語意元素表示主要導覽區塊。'}
+  ],
+  css:[
+    {prompt:'哪個屬性可設定文字顏色？',code:'',options:['font-color','color','text-color','foreground'],correctOption:1,explanation:'color 屬性會設定文字顏色。'},
+    {prompt:'哪種版面配置適合沿單一方向排列？',code:'',options:['Float','Flexbox','Table','Position'],correctOption:1,explanation:'Flexbox 專為沿單一軸線排列項目而設計。'},
+    {prompt:'box-sizing: border-box 的寬度包含什麼？',code:'',options:['只有內容','內容與 padding','內容、padding 與邊框','也包含 margin'],correctOption:2,explanation:'指定寬度會包含內容、padding 與邊框。'},
+    {prompt:'哪個選擇器會選取 class 為 card 的元素？',code:'',options:['#card','.card','card','*card'],correctOption:1,explanation:'句點加上名稱會選取對應的 class。'},
+    {prompt:'哪個屬性設定元素內部留白？',code:'',options:['margin','padding','gap','inset'],correctOption:1,explanation:'padding 是內容與邊框之間的內距。'}
+  ],
+  java:[
+    {prompt:'哪個關鍵字用來建立子類別？',code:'',options:['implements','extends','inherits','super'],correctOption:1,explanation:'類別可透過 extends 繼承另一個類別。'},
+    {prompt:'哪種型別用來儲存 true 或 false？',code:'',options:['bool','boolean','bit','只有 Boolean'],correctOption:1,explanation:'boolean 是 Java 的原始布林型別。'},
+    {prompt:'Java 程式的進入點方法名稱是什麼？',code:'',options:['start','main','run','init'],correctOption:1,explanation:'應用程式從 public static void main 開始。'},
+    {prompt:'哪個修飾詞只允許同一類別直接存取？',code:'',options:['public','protected','private','static'],correctOption:2,explanation:'private 將成員限制在宣告它的類別內。'},
+    {prompt:'建立物件時會呼叫哪一種成員？',code:'',options:['建構子','介面','套件','例外'],correctOption:0,explanation:'建構子負責初始化新建立的物件。'}
+  ],
+  python:[
+    {prompt:'哪個關鍵字用來定義函式？',code:'',options:['func','def','function','lambda'],correctOption:1,explanation:'使用 def，接著寫函式名稱與參數。'},
+    {prompt:"len('code') 的結果是什麼？",code:'',options:['3','4','5','錯誤'],correctOption:1,explanation:'這個字串包含四個字元。'},
+    {prompt:'Python 的列表索引從哪個數字開始？',code:'',options:['0','1','-1','視列表而定'],correctOption:0,explanation:'Python 序列使用從 0 開始的索引。'},
+    {prompt:'哪個關鍵字用來建立條件分支？',code:'',options:['when','if','case','switch'],correctOption:1,explanation:'if 會依條件真假決定執行程式區塊。'},
+    {prompt:'哪個方法會把元素加到列表尾端？',code:'',options:['add','append','push','insertEnd'],correctOption:1,explanation:'list.append(value) 會將值加入列表尾端。'}
+  ]
+};
+function readPagesHistory(){try{return JSON.parse(localStorage.getItem('syntaxlab-pages-history')||'[]')}catch{return []}}
+function writePagesHistory(){try{localStorage.setItem('syntaxlab-pages-history',JSON.stringify(history.value))}catch{}}
+function randomQuestionSet(topic,requestedCount){
+  const bank=pagesQuestionBank[topic]||pagesQuestionBank.javascript;
+  const shuffled=[...bank].sort(()=>Math.random()-.5);
+  return Array.from({length:requestedCount},(_,i)=>({...shuffled[i%shuffled.length],id:i+1}));
+}
+async function load(){
+  if(isPagesDemo){topics.value=pagesTopics;history.value=readPagesHistory();return;}
+  try{const [t,h]=await Promise.all([fetch('/api/topics'),fetch('/api/attempts')]);if(!t.ok||!h.ok)throw Error('API');topics.value=await t.json();history.value=await h.json();}
+  catch{error.value='無法連線至練習服務。請先啟動 Spring Boot API。';topics.value=pagesTopics;}
+}
+async function startPractice(){
+  loading.value=true;error.value='';
+  try{
+    if(isPagesDemo){exercise.value={id:Date.now(),topic:selected.value,difficulty:difficulty.value,questions:randomQuestionSet(selected.value,count.value)};}
+    else{const r=await fetch('/api/exercises/generate',{method:'POST',cache:'no-store',headers:{'Content-Type':'application/json'},body:JSON.stringify({topic:selected.value,difficulty:difficulty.value,count:count.value})});if(!r.ok)throw Error('產生題目失敗');exercise.value=await r.json();}
+    answers.value={};result.value=null;view.value='practice';window.scrollTo({top:0,behavior:'smooth'});
+  }catch{error.value='題目載入失敗，請確認 API 已啟動。'}finally{loading.value=false;}
+}
+async function submit(){
+  if(!exercise.value)return;loading.value=true;
+  try{
+    if(isPagesDemo){
+      const questions=exercise.value.questions.map(q=>({...q,selectedOption:answers.value[q.id]??null}));
+      const score=questions.filter(q=>q.selectedOption===q.correctOption).length;
+      result.value={id:Date.now(),exerciseId:exercise.value.id,topic:exercise.value.topic,score,total:questions.length,completedAt:new Date().toISOString(),questions};
+    }else{
+      const r=await fetch('/api/exercises/'+exercise.value.id+'/submit',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({answers:exercise.value.questions.map(q=>({questionId:q.id,selectedOption:answers.value[q.id]??null}))})});if(!r.ok)throw Error();result.value=await r.json();
+    }
+    exercise.value.questions=result.value.questions;view.value='result';
+    if(isPagesDemo){history.value=[result.value,...history.value].slice(0,100);writePagesHistory();}
+    await refreshHistory();
+  }catch{error.value='送出答案失敗，請再試一次。'}finally{loading.value=false;}
+}
+async function refreshHistory(){
+  if(isPagesDemo){history.value=readPagesHistory();return;}
+  try{history.value=await(await fetch('/api/attempts')).json()}catch{}
+}
+async function openAttempt(id){
+  if(isPagesDemo){result.value=history.value.find(item=>item.id===id);if(result.value){exercise.value={id:result.value.exerciseId,topic:result.value.topic,questions:result.value.questions};view.value='result';}return;}
+  try{result.value=await(await fetch('/api/attempts/'+id)).json();exercise.value={id:result.value.exerciseId,topic:result.value.topic,questions:result.value.questions};view.value='result';}catch{}
+}
 function goHome(){view.value='home';exercise.value=null;result.value=null;}
 function formatDate(s){return new Date(s).toLocaleDateString('zh-TW',{month:'2-digit',day:'2-digit'})+' '+new Date(s).toLocaleTimeString('zh-TW',{hour:'2-digit',minute:'2-digit',hour12:false})}
 onMounted(load);
@@ -31,6 +114,7 @@ onMounted(load);
     <main class="main-area">
       <header class="topbar"><button class="menu-button" @click="mobileMenu=!mobileMenu"><Menu/></button><div class="crumb">學習空間 <ChevronRight :size="14"/> <span>{{view==='history'?'練習紀錄':view==='practice'?'進行練習':view==='result'?'練習結果':'學習總覽'}}</span></div><div class="top-right"><span class="online-dot"></span>專注學習中</div></header>
       <div class="content">
+        <div v-if="isPagesDemo" class="pages-demo-note">線上展示模式｜練習紀錄保存在目前瀏覽器</div>
         <div v-if="error" class="error-banner">{{error}}<button @click="error=''">×</button></div>
         <template v-if="view==='home'">
           <section class="welcome-row"><div><div class="eyebrow"><Sparkles :size="14"/> YOUR LEARNING SPACE</div><h1>今天想學點什麼？</h1><p class="welcome-sub">選擇一個主題，開始你的程式語法練習。</p></div><div class="welcome-art"><div class="art-orbit orbit-one"></div><div class="art-orbit orbit-two"></div><div class="art-code">&lt;/&gt;</div><span class="spark spark-a">✦</span><span class="spark spark-b">✳</span></div></section>

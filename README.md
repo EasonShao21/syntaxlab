@@ -19,6 +19,12 @@ npm run dev
 
 預設使用 H2 檔案資料庫，資料保存在 `backend/data/`。第一次啟動會建立題庫種子資料。
 
+## 線上展示（GitHub Pages）
+
+網站網址：<https://easonshao21.github.io/syntaxlab/>
+
+推送到 `main` 後，GitHub Actions 會自動建置並部署 Vue 前端。Pages 展示模式使用瀏覽器內的示範題庫，作答紀錄保存在使用者目前的瀏覽器。Spring Boot API 與 H2 資料庫不會部署到 GitHub Pages；本機完整模式仍可依照快速開始步驟啟動前後端。
+
 ### AI 題目生成
 
 未設定金鑰時，服務會從依語法主題整理的內建題庫產生題目，讓網站可直接試用。若設定 `OPENAI_API_KEY`，題目生成器會呼叫 OpenAI 相容的 Chat Completions API；可用 `AI_BASE_URL` 與 `AI_MODEL` 指定端點及模型。環境變數範例見 [`backend/.env.example`](backend/.env.example)。金鑰只放在後端環境變數，不要提交到版本控制。
@@ -43,9 +49,4 @@ openapi/     OpenAPI 3.0 YAML 契約
 
 ## GitHub
 
-將此資料夾建立為 GitHub repository 後，依 GitHub 顯示的遠端網址設定 `origin` 並推送 `main` 分支。請先在 GitHub 建立空 repository，再執行：
-
-```bash
-git remote add origin https://github.com/<帳號>/syntaxlab-practice.git
-git push -u origin main
-```
+原始碼 repository：[EasonShao21/syntaxlab](https://github.com/EasonShao21/syntaxlab)。推送到 `main` 後會自動更新 GitHub Pages 展示站。
